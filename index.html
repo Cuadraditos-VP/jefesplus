@@ -1305,6 +1305,13 @@
     // Snapshot de la programación ORIGINAL (tal cual estaba antes de cualquier reasignación de turno)
     let ORIGINAL_CODES = people.map(p => p.codes.slice());
 
+    // Copia INMUTABLE de la programación inicial de septiembre, tal como se cargó
+    // por primera vez en esta página. A diferencia de ORIGINAL_CODES (que se va
+    // actualizando cada vez que se sube/aprueba un nuevo JSON oficial), esta copia
+    // nunca se reasigna, para poder ver siempre "la inicial" aunque haya pasado
+    // por muchas rondas de cambios.
+    const INITIAL_CODES = people.map(p => p.codes.slice());
+
     let editsMap = {};
     try { editsMap = JSON.parse(localStorage.getItem("ctEditsMap") || "{}"); } catch (e) { editsMap = {}; }
 
@@ -1483,7 +1490,7 @@
         <td class="sticky-col person-id" data-pi="${pi}">${person.id}</td>
         <td class="sticky-col-2 person-name" data-pi="${pi}">${person.name}</td>
       `;
-      const codesArr = viewingOriginal ? ORIGINAL_CODES[pi] : person.codes;
+      const codesArr = viewingOriginal ? INITIAL_CODES[pi] : person.codes;
       const onlyDay = selectedDay !== null;
       let di = 0;
       while (di < codesArr.length) {
@@ -1609,7 +1616,7 @@
         } else {
           const ranked = [];
           people.forEach((p, pi) => {
-            const codesArr = viewingOriginal ? ORIGINAL_CODES[pi] : p.codes;
+            const codesArr = viewingOriginal ? INITIAL_CODES[pi] : p.codes;
             const code = codesArr[selectedDay] || "";
             const order = DAY_VIEW_ORDER.indexOf(code);
             if (order === -1) return;
@@ -2015,7 +2022,7 @@
     btnOriginalView.addEventListener("click", () => {
       viewingOriginal = !viewingOriginal;
       btnOriginalView.textContent = viewingOriginal ? "O" : "A";
-      btnOriginalView.title = viewingOriginal ? "Original" : "Actual";
+      btnOriginalView.title = viewingOriginal ? "Inicial de septiembre" : "Actual";
       btnOriginalView.style.background = viewingOriginal ? "#5b21b6" : "#7c3aed";
       refreshAfterEdit();
     });
@@ -2125,7 +2132,7 @@
 
     function openPersonCalendar(pi) {
       const person = people[pi];
-      const codesArr = viewingOriginal ? ORIGINAL_CODES[pi] : person.codes;
+      const codesArr = viewingOriginal ? INITIAL_CODES[pi] : person.codes;
       personCalTitle.textContent = person.name + " · " + person.id;
       const weekDays = ["LU","MA","MI","JU","VI","SA","DO"];
       // Sept 2026: el 1 es martes (índice 1 si LU=0)
