@@ -1013,9 +1013,31 @@
     }
     .sol-item.aprobada { opacity: 0.65; border-color: #86efac; background: #f0fdf4; }
     .sol-item.rechazada { opacity: 0.55; border-color: #fca5a5; background: #fef2f2; }
+    .sol-item.parcial { border-color: #fbbf24; background: #fffbeb; }
     .sol-code { font-weight: 800; color: #9a3412; font-size: 0.95rem; }
     .sol-meta { font-size: 0.72rem; color: #64748b; margin: 2px 0 6px; }
     .sol-lines { font-size: 0.78rem; line-height: 1.35; white-space: pre-wrap; margin: 0 0 8px; }
+    .sol-lines-list { margin: 0 0 8px; }
+    .sol-line-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 5px 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.78rem; line-height: 1.3;
+    }
+    .sol-line-item:last-child { border-bottom: none; }
+    .sol-line-text { flex: 1; }
+    .sol-line-item.aprobado .sol-line-text { color: #15803d; }
+    .sol-line-item.rechazado .sol-line-text { color: #b91c1c; text-decoration: line-through; }
+    .sol-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .sol-item-actions button {
+      border: 0; border-radius: 6px; width: 26px; height: 26px; font-weight: 800;
+      font-size: 0.85rem; cursor: pointer; color: #fff; line-height: 1;
+    }
+    .sol-approve-item { background: #16a34a; }
+    .sol-reject-item { background: #dc2626; }
+    .sol-item-status {
+      flex-shrink: 0; font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 20px;
+    }
+    .sol-item-status.aprobado { background: #dcfce7; color: #15803d; }
+    .sol-item-status.rechazado { background: #fee2e2; color: #b91c1c; }
     .sol-actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .sol-actions button {
       border: 0; border-radius: 7px; padding: 6px 10px; font-weight: 700;
@@ -1023,6 +1045,13 @@
     }
     .sol-approve { background: #16a34a; }
     .sol-reject { background: #dc2626; }
+    .sol-bulk-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .sol-bulk-actions button {
+      border: 0; border-radius: 7px; padding: 6px 10px; font-weight: 700;
+      font-size: 0.7rem; cursor: pointer; color: #fff;
+    }
+    .sol-approve-all { background: #16a34a; }
+    .sol-reject-all { background: #dc2626; }
     .sol-paste-box {
       width: 100%; min-height: 72px; border: 1px solid #cbd5e1; border-radius: 8px;
       padding: 8px; font-size: 0.78rem; margin: 6px 0 8px; resize: vertical;
@@ -2151,28 +2180,60 @@
       } catch (e) { return ""; }
     }
 
+    function batchOverallStatus(b) {
+      const changes = b.changes || [];
+      if (!changes.length) return b.status || "enviada";
+      const pending = changes.filter(c => !c.status || c.status === "pendiente").length;
+      const aprobados = changes.filter(c => c.status === "aprobado").length;
+      const rechazados = changes.filter(c => c.status === "rechazado").length;
+      if (pending > 0) return "enviada";
+      if (aprobados && rechazados) return "parcial";
+      if (rechazados) return "rechazada";
+      return "aprobada";
+    }
+
     function renderSolicitudes() {
       if (!solicitudesList) return;
       if (!requestBatches.length) {
         solicitudesList.innerHTML = '<p style="font-size:0.82rem;color:#64748b;margin:8px 0">No hay solicitudes guardadas en este dispositivo.</p>';
         return;
       }
-      solicitudesList.innerHTML = requestBatches.map((b, idx) => {
-        const lines = (b.changes || []).map(c =>
-          "• " + c.name + " (" + c.id + ") " + c.dayLabel + ": " + c.from + " → " + c.to
-        ).join("\n");
-        const st = b.status || "enviada";
-        const actions = (st === "enviada" || st === "pendiente")
-          ? `<div class="sol-actions">
-               <button type="button" class="sol-approve" data-sol-approve="${idx}">Aprobar</button>
-               <button type="button" class="sol-reject" data-sol-reject="${idx}">Rechazar</button>
+      solicitudesList.innerHTML = requestBatches.map((b, bi) => {
+        const changes = b.changes || [];
+        const st = batchOverallStatus(b);
+        b.status = st;
+        const pendingCount = changes.filter(c => !c.status || c.status === "pendiente").length;
+
+        const lines = changes.map((c, ci) => {
+          const cst = c.status || "pendiente";
+          const text = "• " + c.name + " (" + c.id + ") " + c.dayLabel + ": " + c.from + " → " + c.to;
+          let actions;
+          if (cst === "pendiente") {
+            actions = `<div class="sol-item-actions">
+                 <button type="button" class="sol-approve-item" data-bi="${bi}" data-ci="${ci}" title="Aprobar">✓</button>
+                 <button type="button" class="sol-reject-item" data-bi="${bi}" data-ci="${ci}" title="Rechazar">✕</button>
+               </div>`;
+          } else {
+            actions = `<span class="sol-item-status ${cst}">${cst === "aprobado" ? "Aprobado" : "Rechazado"}</span>`;
+          }
+          return `<div class="sol-line-item ${cst}">
+              <span class="sol-line-text">${text}</span>
+              ${actions}
+            </div>`;
+        }).join("");
+
+        const bulkActions = pendingCount > 1
+          ? `<div class="sol-bulk-actions">
+               <button type="button" class="sol-approve-all" data-bi="${bi}">Aprobar todas (${pendingCount})</button>
+               <button type="button" class="sol-reject-all" data-bi="${bi}">Rechazar todas</button>
              </div>`
-          : `<div class="sol-meta">Estado: ${st}</div>`;
+          : "";
+
         return `<div class="sol-item ${st}">
           <div class="sol-code">Código ${b.code}</div>
-          <div class="sol-meta">${formatSolDate(b.createdAt)} · ${(b.changes || []).length} cambio(s)</div>
-          <div class="sol-lines">${lines}</div>
-          ${actions}
+          <div class="sol-meta">${formatSolDate(b.createdAt)} · ${changes.length} cambio(s)${pendingCount ? " · " + pendingCount + " pendiente(s)" : ""}</div>
+          <div class="sol-lines-list">${lines}</div>
+          ${bulkActions}
         </div>`;
       }).join("");
     }
@@ -2191,27 +2252,32 @@
       if (e.target === solicitudesOverlay) closeSolicitudes();
     });
 
-    function applyBatchToPeople(batch, approve) {
-      (batch.changes || []).forEach(c => {
-        const pi = c.pi;
-        const di = c.di;
-        if (pi == null || di == null || !people[pi]) return;
+    // Aplica la decisión (aprobar/rechazar) de UN cambio puntual, sin persistir todavía
+    function applyChangeToState(change, approve) {
+      const pi = change.pi;
+      const di = change.di;
+      if (pi != null && di != null && people[pi]) {
         if (approve) {
           // Confirmar el cambio solicitado
-          const toCode = c.to === "·" ? "" : c.to;
+          const toCode = change.to === "·" ? "" : change.to;
           people[pi].codes[di] = toCode;
-          editsMap[c.key || (pi + ":" + di)] = toCode;
-          clearPending(pi, di);
+          editsMap[change.key || (pi + ":" + di)] = toCode;
         } else {
           // Rechazar: volver al original
           const orig = (ORIGINAL_CODES[pi] && ORIGINAL_CODES[pi][di]) || "";
           people[pi].codes[di] = orig;
-          delete editsMap[c.key || (pi + ":" + di)];
-          clearPending(pi, di);
+          delete editsMap[change.key || (pi + ":" + di)];
         }
-      });
+        clearPending(pi, di);
+      }
+      change.status = approve ? "aprobado" : "rechazado";
+    }
+
+    // Persiste y refresca la vista después de aplicar una o varias decisiones
+    function finalizeSolicitudDecisions() {
       try { localStorage.setItem("ctEditsMap", JSON.stringify(editsMap)); } catch (e) {}
       savePendingKeys();
+      saveRequestBatches();
       refreshAfterEdit();
     }
 
@@ -2222,6 +2288,24 @@
       return "Solicitud " + batch.code + " RECHAZADA\n\n" +
         lines.join("\n") +
         "\n\nQueda la programación original.";
+    }
+
+    function buildSingleRejectionMessage(batch, change) {
+      return "Solicitud " + batch.code + " — cambio RECHAZADO\n\n" +
+        "• " + change.name + " (" + change.id + ") " + change.dayLabel + ": " + change.from + " → " + change.to +
+        "\n\nQueda la programación original para ese día.";
+    }
+
+    function copySolicitudMessage(msg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(msg).then(() => {
+          alert("Mensaje copiado. Pegalo en WhatsApp al jefe.");
+        }).catch(() => {
+          prompt("Copiá este mensaje y envialo al jefe:", msg);
+        });
+      } else {
+        prompt("Copiá este mensaje y envialo al jefe:", msg);
+      }
     }
 
     function downloadOfficialJson() {
@@ -2239,41 +2323,59 @@
     }
 
     solicitudesList.addEventListener("click", (e) => {
-      const ap = e.target.closest("[data-sol-approve]");
-      const rj = e.target.closest("[data-sol-reject]");
-      if (ap) {
-        const idx = Number(ap.dataset.solApprove);
-        const batch = requestBatches[idx];
+      const apItem = e.target.closest(".sol-approve-item");
+      const rjItem = e.target.closest(".sol-reject-item");
+      const apAll = e.target.closest(".sol-approve-all");
+      const rjAll = e.target.closest(".sol-reject-all");
+
+      // Aprobar/rechazar UN cambio puntual de una solicitud
+      if (apItem || rjItem) {
+        const btn = apItem || rjItem;
+        const bi = Number(btn.dataset.bi);
+        const ci = Number(btn.dataset.ci);
+        const batch = requestBatches[bi];
         if (!batch) return;
-        if (!confirm("¿Aprobar solicitud " + batch.code + "?")) return;
-        applyBatchToPeople(batch, true);
-        batch.status = "aprobada";
-        saveRequestBatches();
+        const change = (batch.changes || [])[ci];
+        if (!change) return;
+        const approve = !!apItem;
+        const desc = change.name + " (" + change.id + ") " + change.dayLabel + ": " + change.from + " → " + change.to;
+        if (!confirm((approve ? "¿Aprobar" : "¿Rechazar") + " este cambio?\n" + desc)) return;
+        applyChangeToState(change, approve);
+        finalizeSolicitudDecisions();
         renderSolicitudes();
-        if (confirm("Solicitud aprobada.\n\n¿Descargar septiembre-2026.json para subirlo a GitHub y que lo vean todos?")) {
-          downloadOfficialJson();
+        if (approve) {
+          if (confirm("Cambio aprobado.\n\n¿Descargar septiembre-2026.json para subirlo a GitHub y que lo vean todos?")) {
+            downloadOfficialJson();
+          }
+        } else {
+          const msg = buildSingleRejectionMessage(batch, change);
+          if (confirm("Cambio rechazado.\n\n¿Copiar el mensaje de rechazo al portapapeles para enviárselo al jefe por WhatsApp?")) {
+            copySolicitudMessage(msg);
+          }
         }
         return;
       }
-      if (rj) {
-        const idx = Number(rj.dataset.solReject);
-        const batch = requestBatches[idx];
+
+      // Aprobar/rechazar todas las líneas aún pendientes de una solicitud
+      if (apAll || rjAll) {
+        const bi = Number((apAll || rjAll).dataset.bi);
+        const batch = requestBatches[bi];
         if (!batch) return;
-        if (!confirm("¿Rechazar solicitud " + batch.code + "? Se restaurarán los turnos originales.")) return;
-        applyBatchToPeople(batch, false);
-        batch.status = "rechazada";
-        saveRequestBatches();
+        const approve = !!apAll;
+        const pending = (batch.changes || []).filter(c => !c.status || c.status === "pendiente");
+        if (!pending.length) return;
+        if (!confirm((approve ? "¿Aprobar" : "¿Rechazar") + " las " + pending.length + " solicitudes pendientes de " + batch.code + "?")) return;
+        pending.forEach(c => applyChangeToState(c, approve));
+        finalizeSolicitudDecisions();
         renderSolicitudes();
-        const msg = buildRejectionMessage(batch);
-        if (confirm("Solicitud rechazada.\n\n¿Copiar el mensaje de rechazo al portapapeles para enviárselo al jefe por WhatsApp?")) {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(msg).then(() => {
-              alert("Mensaje copiado. Pegalo en WhatsApp al jefe.");
-            }).catch(() => {
-              prompt("Copiá este mensaje y envialo al jefe:", msg);
-            });
-          } else {
-            prompt("Copiá este mensaje y envialo al jefe:", msg);
+        if (approve) {
+          if (confirm("Cambios aprobados.\n\n¿Descargar septiembre-2026.json para subirlo a GitHub y que lo vean todos?")) {
+            downloadOfficialJson();
+          }
+        } else {
+          const msg = buildRejectionMessage({ code: batch.code, changes: pending });
+          if (confirm("Cambios rechazados.\n\n¿Copiar el mensaje de rechazo al portapapeles para enviárselo al jefe por WhatsApp?")) {
+            copySolicitudMessage(msg);
           }
         }
       }
@@ -2288,7 +2390,7 @@
       }
       const codeMatch = text.match(/C[oó]digo de solicitud:\s*([A-Z0-9]{3,8})/i);
       const code = codeMatch ? codeMatch[1].toUpperCase() : generateRequestCode();
-      if (requestBatches.some(b => b.code === code && (b.status === "enviada" || b.status === "pendiente"))) {
+      if (requestBatches.some(b => b.code === code && (b.changes || []).some(c => !c.status || c.status === "pendiente"))) {
         alert("Ya existe una solicitud abierta con código " + code);
         return;
       }
